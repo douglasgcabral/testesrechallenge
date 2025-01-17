@@ -1,0 +1,151 @@
+# MySQL Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: db-deployment
+  labels:
+    app: database
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: database
+  template:
+    metadata:
+      labels:
+        app: database
+    spec:
+      containers:
+      - name: mysql
+        image: mysql/mysql-server:8.0.23
+        ports:
+        - containerPort: 3306
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          value: "12345678"
+        - name: MYSQL_DATABASE
+          value: "emp"
+        - name: MYSQL_USER
+          value: "root"
+        - name: MYSQL_PASSWORD
+          value: "12345678"
+        resources:
+          requests:
+            memory: "256Mi"    # A quantidade de memória que o Kubernetes garantirá
+            cpu: "250m"         # A quantidade de CPU que o Kubernetes garantirá
+          limits:
+            memory: "512Mi"    # A quantidade máxima de memória que o pod pode consumir
+            cpu: "500m"        # A quantidade máxima de CPU que o pod pode consumir
+
+---
+
+# MySQL Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: db-service
+spec:
+  selector:
+    app: database
+  ports:
+  - protocol: TCP
+    port: 3306
+    targetPort: 3306
+  type: ClusterIP
+
+---
+
+# Web Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-deployment
+  labels:
+    app: web
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: web
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      containers:
+      - name: web
+        image: demo/sre-challenge
+        ports:
+        - containerPort: 8080
+        env:
+        - name: DATABASE_ROOT_PASSWORD
+          value: "12345678"
+        resources:
+          requests:
+            memory: "128Mi"    # A quantidade de memória que o Kubernetes garantirá
+            cpu: "100m"         # A quantidade de CPU que o Kubernetes garantirá
+          limits:
+            memory: "256Mi"    # A quantidade máxima de memória que o pod pode consumir
+            cpu: "250m"        # A quantidade máxima de CPU que o pod pode consumir
+
+---
+
+# Web Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-service
+spec:
+  selector:
+    app: web
+  ports:
+  - protocol: TCP
+    port: 8080
+    targetPort: 8080
+  type: NodePort
+
+---
+
+# Horizontal Pod Autoscaler for MySQL
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: mysql-hpa
+  namespace: default
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: db-deployment
+  minReplicas: 1
+  maxReplicas: 5
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 80
+
+---
+
+# Horizontal Pod Autoscaler for Web
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: web-hpa
+  namespace: default
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: web-deployment
+  minReplicas: 1
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 80
